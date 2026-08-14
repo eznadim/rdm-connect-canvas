@@ -139,13 +139,13 @@ export type Binding = {
   cellId: string;
   cellLabel: string;
   kind: BindKind;
-  controllerId?: string;
-  pointId?: string;
-  suffix?: string;
-  prefix?: string;
-  decimals?: number;
-  rules?: { match: string; color: string }[];
-  targetGraphId?: string;
+  controllerId?: string | undefined;
+  pointId?: string | undefined;
+  suffix?: string | undefined;
+  prefix?: string | undefined;
+  decimals?: number | undefined;
+  rules?: { match: string; color: string }[] | undefined;
+  targetGraphId?: string | undefined;
 };
 
 export const defaultFillRules = [

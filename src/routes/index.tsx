@@ -66,17 +66,17 @@ const kindMeta: Record<BindKind, { label: string; icon: typeof TypeIcon; token: 
 const typeOrder: PointType[] = ["input", "output", "parameter", "state"];
 
 function BindingStudio() {
-  const [graphId, setGraphId] = useState(graphs[0].id);
+  const [graphId, setGraphId] = useState(graphs[0]!.id);
   const [bindings, setBindings] = useState<Binding[]>([]);
   const [selectedCell, setSelectedCell] = useState<CellDef | null>(null);
   const [kind, setKind] = useState<BindKind>("text");
-  const [controllerId, setControllerId] = useState(controllers[0].id);
+  const [controllerId, setControllerId] = useState(controllers[0]!.id);
   const [typeFilter, setTypeFilter] = useState<PointType>("input");
   const [query, setQuery] = useState("");
   const [pointId, setPointId] = useState<string | null>(null);
   const [suffix, setSuffix] = useState("");
   const [prefix, setPrefix] = useState("");
-  const [targetGraphId, setTargetGraphId] = useState(graphs[1].id);
+  const [targetGraphId, setTargetGraphId] = useState(graphs[1]!.id);
 
   const controller = controllers.find((c) => c.id === controllerId)!;
   const points = useMemo(
