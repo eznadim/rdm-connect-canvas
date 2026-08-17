@@ -149,7 +149,8 @@ export type Binding = {
 };
 
 export const defaultFillRules = [
-  { match: "Run", color: "state-run" },
-  { match: "Stop", color: "state-stop" },
-  { match: "Alarm", color: "state-alarm" },
+  { match: "Run", color: "#2fae6b" },
+  { match: "Stop", color: "#6b7280" },
+  { match: "Alarm", color: "#e0483f" },
 ];
+

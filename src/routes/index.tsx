@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowRightLeft,
   Check,
@@ -8,6 +8,7 @@ import {
   Link2,
   MousePointerClick,
   PaintBucket,
+  Plus,
   Search,
   Trash2,
   Type as TypeIcon,
@@ -16,6 +17,7 @@ import {
 import { SchematicCanvas, schematicCells, type CellDef } from "@/components/binding/SchematicCanvas";
 import {
   controllers,
+  defaultFillRules,
   graphs,
   pointTypeLabels,
   type BindKind,
@@ -52,6 +54,8 @@ export const Route = createFileRoute("/")({
         property: "og:description",
         content: "Guided three-step workspace for binding live controller data to SVG schematics.",
       },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: BindingStudio,
@@ -64,6 +68,9 @@ const kindMeta: Record<BindKind, { label: string; icon: typeof TypeIcon; token: 
 };
 
 const typeOrder: PointType[] = ["input", "output", "parameter", "state"];
+const kindOrder: BindKind[] = ["text", "fill", "navigation"];
+
+const bindingId = (cellId: string, kind: BindKind) => `${cellId}:${kind}`;
 
 function BindingStudio() {
   const [graphId, setGraphId] = useState(graphs[0]!.id);
@@ -76,6 +83,7 @@ function BindingStudio() {
   const [pointId, setPointId] = useState<string | null>(null);
   const [suffix, setSuffix] = useState("");
   const [prefix, setPrefix] = useState("");
+  const [rules, setRules] = useState<{ match: string; color: string }[]>(defaultFillRules);
   const [targetGraphId, setTargetGraphId] = useState(graphs[1]!.id);
 
   const controller = controllers.find((c) => c.id === controllerId)!;
@@ -90,44 +98,82 @@ function BindingStudio() {
   );
   const point = controller.points.find((p) => p.id === pointId) ?? null;
 
-  const boundCellIds = useMemo(
-    () => Object.fromEntries(bindings.map((b) => [b.cellId, b.kind])) as Record<string, BindKind>,
-    [bindings],
-  );
+  const cellKinds = useMemo(() => {
+    const out: Record<string, BindKind[]> = {};
+    for (const b of bindings) (out[b.cellId] ??= []).push(b.kind);
+    for (const id in out) out[id]!.sort((a, z) => kindOrder.indexOf(a) - kindOrder.indexOf(z));
+    return out;
+  }, [bindings]);
 
-  const liveValues = useMemo(() => {
+  const valueOf = (b: Binding) =>
+    controllers.find((x) => x.id === b.controllerId)?.points.find((x) => x.id === b.pointId)
+      ?.value ?? null;
+
+  const cellText = useMemo(() => {
     const out: Record<string, string> = {};
     for (const b of bindings) {
-      if (b.kind === "navigation") {
+      if (b.kind === "text") {
+        const v = valueOf(b);
+        if (v) out[b.cellId] = `${b.prefix ?? ""}${v}${b.suffix ? " " + b.suffix : ""}`.trim();
+      } else if (b.kind === "navigation" && !out[b.cellId]) {
         out[b.cellId] = graphs.find((g) => g.id === b.targetGraphId)?.name ?? "Link";
-        continue;
       }
-      const c = controllers.find((x) => x.id === b.controllerId);
-      const p = c?.points.find((x) => x.id === b.pointId);
-      if (p) out[b.cellId] = `${b.prefix ?? ""}${p.value}${b.suffix ? " " + b.suffix : ""}`.trim();
+    }
+    // text binding always wins over nav label
+    for (const b of bindings) {
+      if (b.kind === "text") {
+        const v = valueOf(b);
+        if (v) out[b.cellId] = `${b.prefix ?? ""}${v}${b.suffix ? " " + b.suffix : ""}`.trim();
+      }
     }
     return out;
   }, [bindings]);
+
+  const cellFill = useMemo(() => {
+    const out: Record<string, string> = {};
+    for (const b of bindings) {
+      if (b.kind !== "fill") continue;
+      const v = valueOf(b);
+      const rule = b.rules?.find((r) => r.match.toLowerCase() === (v ?? "").toLowerCase());
+      if (rule) out[b.cellId] = rule.color;
+    }
+    return out;
+  }, [bindings]);
+
+  const existing = selectedCell
+    ? (bindings.find((b) => b.id === bindingId(selectedCell.id, kind)) ?? null)
+    : null;
+
+  // load existing binding into the form whenever the cell or bind type changes
+  useEffect(() => {
+    if (!selectedCell) return;
+    const b = bindings.find((x) => x.id === bindingId(selectedCell.id, kind));
+    if (!b) {
+      setPointId(null);
+      setPrefix("");
+      setSuffix("");
+      setRules(defaultFillRules);
+      return;
+    }
+    if (b.controllerId) setControllerId(b.controllerId);
+    setPointId(b.pointId ?? null);
+    setPrefix(b.prefix ?? "");
+    setSuffix(b.suffix ?? "");
+    setRules(b.rules ?? defaultFillRules);
+    if (b.targetGraphId) setTargetGraphId(b.targetGraphId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCell?.id, kind]);
 
   const canApply = selectedCell && (kind === "navigation" ? !!targetGraphId : !!point);
 
   function selectCell(cell: CellDef) {
     setSelectedCell(cell);
-    const existing = bindings.find((b) => b.cellId === cell.id);
-    if (existing) {
-      setKind(existing.kind);
-      if (existing.controllerId) setControllerId(existing.controllerId);
-      if (existing.pointId) setPointId(existing.pointId);
-      setSuffix(existing.suffix ?? "");
-      setPrefix(existing.prefix ?? "");
-      if (existing.targetGraphId) setTargetGraphId(existing.targetGraphId);
-    }
   }
 
   function applyBinding() {
     if (!selectedCell) return;
     const next: Binding = {
-      id: `${selectedCell.id}:${kind}`,
+      id: bindingId(selectedCell.id, kind),
       cellId: selectedCell.id,
       cellLabel: selectedCell.label,
       kind,
@@ -135,13 +181,14 @@ function BindingStudio() {
       pointId: kind === "navigation" ? undefined : (pointId ?? undefined),
       suffix: kind === "text" ? suffix || point?.units : undefined,
       prefix: kind === "text" ? prefix : undefined,
+      rules: kind === "fill" ? rules : undefined,
       targetGraphId: kind === "navigation" ? targetGraphId : undefined,
     };
-    setBindings((prev) => [...prev.filter((b) => b.cellId !== selectedCell.id), next]);
+    setBindings((prev) => [...prev.filter((b) => b.id !== next.id), next]);
   }
 
-  function removeBinding(cellId: string) {
-    setBindings((prev) => prev.filter((b) => b.cellId !== cellId));
+  function removeBinding(id: string) {
+    setBindings((prev) => prev.filter((b) => b.id !== id));
   }
 
   const stepDone = { one: true, two: !!selectedCell, three: !!canApply };
@@ -197,7 +244,7 @@ function BindingStudio() {
         {[
           { n: 1, label: "Pick a diagram", done: stepDone.one },
           { n: 2, label: "Click a cell on the canvas", done: stepDone.two },
-          { n: 3, label: "Choose bind type & source", done: stepDone.three },
+          { n: 3, label: "Add one or more bind types", done: stepDone.three },
         ].map((s, i) => (
           <div key={s.n} className="flex items-center gap-2">
             <span
@@ -221,10 +268,11 @@ function BindingStudio() {
         <section className="flex min-w-0 flex-1 flex-col">
           <div className="flex items-center justify-between border-b border-border px-5 py-2 text-xs text-muted-foreground">
             <span>
-              {schematicCells.length} detected cells · {bindings.length} bound
+              {schematicCells.length} detected cells · {bindings.length} bindings on{" "}
+              {Object.keys(cellKinds).length} cells
             </span>
             <span className="flex items-center gap-4">
-              {(Object.keys(kindMeta) as BindKind[]).map((k) => (
+              {kindOrder.map((k) => (
                 <span key={k} className="flex items-center gap-1.5">
                   <span
                     className="size-2 rounded-full"
@@ -239,8 +287,9 @@ function BindingStudio() {
             <div className="h-full overflow-hidden rounded-lg border border-border">
               <SchematicCanvas
                 selectedCellId={selectedCell?.id ?? null}
-                boundCellIds={boundCellIds}
-                liveValues={liveValues}
+                cellKinds={cellKinds}
+                cellText={cellText}
+                cellFill={cellFill}
                 onSelect={selectCell}
               />
             </div>
@@ -280,13 +329,20 @@ function BindingStudio() {
                                 .find((c) => c.id === b.controllerId)
                                 ?.points.find((p) => p.id === b.pointId)?.name ?? "—"
                             }`;
+                      const live =
+                        b.kind === "fill"
+                          ? (valueOf(b) ?? "—")
+                          : b.kind === "text"
+                            ? (cellText[b.cellId] ?? "—")
+                            : `→ /${graphs.find((g) => g.id === b.targetGraphId)?.route}`;
                       return (
                         <tr
                           key={b.id}
                           className="cursor-pointer border-t border-border/60 hover:bg-accent/40"
-                          onClick={() =>
-                            selectCell(schematicCells.find((c) => c.id === b.cellId)!)
-                          }
+                          onClick={() => {
+                            setSelectedCell(schematicCells.find((c) => c.id === b.cellId)!);
+                            setKind(b.kind);
+                          }}
                         >
                           <td className="py-2">{b.cellLabel}</td>
                           <td>
@@ -301,7 +357,15 @@ function BindingStudio() {
                             </span>
                           </td>
                           <td className="font-mono text-xs text-muted-foreground">{src}</td>
-                          <td className="font-mono text-xs">{liveValues[b.cellId] ?? "—"}</td>
+                          <td className="flex items-center gap-2 py-2 font-mono text-xs">
+                            {b.kind === "fill" && cellFill[b.cellId] && (
+                              <span
+                                className="size-3 rounded-sm border border-border"
+                                style={{ background: cellFill[b.cellId] }}
+                              />
+                            )}
+                            {live}
+                          </td>
                           <td className="text-right">
                             <Button
                               variant="ghost"
@@ -309,7 +373,7 @@ function BindingStudio() {
                               className="size-7 text-destructive"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                removeBinding(b.cellId);
+                                removeBinding(b.id);
                               }}
                             >
                               <Trash2 className="size-3.5" />
@@ -333,7 +397,7 @@ function BindingStudio() {
               <p className="text-sm font-medium">Select a cell</p>
               <p className="text-xs text-muted-foreground">
                 Every rectangle in the diagram is a detectable cell. Click one and its binding
-                options appear here.
+                options appear here. A cell can carry text, fill and navigation at the same time.
               </p>
             </div>
           ) : (
@@ -344,17 +408,49 @@ function BindingStudio() {
                 </p>
                 <p className="text-sm font-semibold">{selectedCell.label}</p>
                 <p className="font-mono text-[11px] text-muted-foreground">{selectedCell.id}</p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {(cellKinds[selectedCell.id] ?? []).length === 0 ? (
+                    <span className="text-[11px] text-muted-foreground">No bindings yet</span>
+                  ) : (
+                    (cellKinds[selectedCell.id] ?? []).map((k) => {
+                      const Icon = kindMeta[k].icon;
+                      return (
+                        <button
+                          key={k}
+                          onClick={() => setKind(k)}
+                          className={cn(
+                            "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]",
+                            kindMeta[k].token,
+                            kind === k ? "border-current" : "border-border",
+                          )}
+                        >
+                          <Icon className="size-3" />
+                          {kindMeta[k].label}
+                          <Trash2
+                            className="size-3 text-destructive"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeBinding(bindingId(selectedCell.id, k));
+                            }}
+                          />
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
               </div>
 
               <div className="px-4 py-3">
                 <Tabs value={kind} onValueChange={(v) => setKind(v as BindKind)}>
                   <TabsList className="grid w-full grid-cols-3">
-                    {(Object.keys(kindMeta) as BindKind[]).map((k) => {
+                    {kindOrder.map((k) => {
                       const Icon = kindMeta[k].icon;
+                      const bound = (cellKinds[selectedCell.id] ?? []).includes(k);
                       return (
                         <TabsTrigger key={k} value={k} className="gap-1.5 text-xs">
                           <Icon className="size-3.5" />
                           {kindMeta[k].label}
+                          {bound && <Check className="size-3 text-state-run" />}
                         </TabsTrigger>
                       );
                     })}
@@ -495,20 +591,69 @@ function BindingStudio() {
 
                     {kind === "fill" && (
                       <div className="space-y-1.5">
-                        <Label className="text-xs">Colour rules</Label>
-                        {["Run", "Stop", "Alarm"].map((m) => (
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs">Colour rules</Label>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 gap-1 text-[11px]"
+                            onClick={() =>
+                              setRules((r) => [...r, { match: "", color: "#7c8794" }])
+                            }
+                          >
+                            <Plus className="size-3" /> Add rule
+                          </Button>
+                        </div>
+                        {rules.map((r, i) => (
                           <div
-                            key={m}
+                            key={i}
                             className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5 text-xs"
                           >
-                            <span className="text-muted-foreground">when value is</span>
-                            <span className="font-mono">{m}</span>
-                            <span
-                              className="ml-auto size-4 rounded"
-                              style={{ background: `var(--state-${m.toLowerCase()})` }}
+                            <span className="shrink-0 text-muted-foreground">when value is</span>
+                            <Input
+                              value={r.match}
+                              placeholder="Run"
+                              onChange={(e) =>
+                                setRules((prev) =>
+                                  prev.map((x, xi) =>
+                                    xi === i ? { ...x, match: e.target.value } : x,
+                                  ),
+                                )
+                              }
+                              className="h-7 flex-1 font-mono text-xs"
                             />
+                            <label
+                              className="relative size-6 shrink-0 cursor-pointer overflow-hidden rounded border border-border"
+                              style={{ background: r.color }}
+                              title={r.color}
+                            >
+                              <input
+                                type="color"
+                                value={r.color}
+                                onChange={(e) =>
+                                  setRules((prev) =>
+                                    prev.map((x, xi) =>
+                                      xi === i ? { ...x, color: e.target.value } : x,
+                                    ),
+                                  )
+                                }
+                                className="absolute inset-0 cursor-pointer opacity-0"
+                              />
+                            </label>
+                            <button
+                              onClick={() =>
+                                setRules((prev) => prev.filter((_, xi) => xi !== i))
+                              }
+                              className="text-destructive"
+                              aria-label="Remove rule"
+                            >
+                              <Trash2 className="size-3.5" />
+                            </button>
                           </div>
                         ))}
+                        <p className="text-[11px] text-muted-foreground">
+                          Matching is case-insensitive against the live point value.
+                        </p>
                       </div>
                     )}
                   </div>
@@ -520,26 +665,48 @@ function BindingStudio() {
                   <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
                     Preview
                   </p>
-                  <p className="font-mono text-sm">
-                    {kind === "navigation"
-                      ? `→ /${graphs.find((g) => g.id === targetGraphId)?.route}`
-                      : point
-                        ? `${prefix}${point.value}${suffix || point.units ? " " + (suffix || point.units) : ""}`
-                        : "—"}
+                  <p className="flex items-center gap-2 font-mono text-sm">
+                    {kind === "navigation" ? (
+                      `→ /${graphs.find((g) => g.id === targetGraphId)?.route}`
+                    ) : kind === "fill" ? (
+                      point ? (
+                        <>
+                          <span
+                            className="size-3 rounded-sm border border-border"
+                            style={{
+                              background:
+                                rules.find(
+                                  (r) => r.match.toLowerCase() === point.value.toLowerCase(),
+                                )?.color ?? "transparent",
+                            }}
+                          />
+                          {point.value}
+                        </>
+                      ) : (
+                        "—"
+                      )
+                    ) : point ? (
+                      `${prefix}${point.value}${suffix || point.units ? " " + (suffix || point.units) : ""}`
+                    ) : (
+                      "—"
+                    )}
                   </p>
                 </div>
                 <div className="flex gap-2">
                   <Button className="flex-1" disabled={!canApply} onClick={applyBinding}>
-                    Apply binding
+                    {existing ? `Update ${kindMeta[kind].label} binding` : `Add ${kindMeta[kind].label} binding`}
                   </Button>
-                  {boundCellIds[selectedCell.id] && (
-                    <Button variant="outline" onClick={() => removeBinding(selectedCell.id)}>
+                  {existing && (
+                    <Button
+                      variant="outline"
+                      onClick={() => removeBinding(bindingId(selectedCell.id, kind))}
+                    >
                       Unbind
                     </Button>
                   )}
                 </div>
                 <Badge variant="secondary" className="w-full justify-center text-[11px]">
-                  Bindings save as JSON against the diagram, not the SVG
+                  One cell can hold text + fill + navigation at once
                 </Badge>
               </div>
             </>
