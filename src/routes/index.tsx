@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRightLeft,
   Check,
@@ -12,9 +12,15 @@ import {
   Search,
   Trash2,
   Type as TypeIcon,
+  Upload,
+  X,
 } from "lucide-react";
 
 import { SchematicCanvas, schematicCells, type CellDef } from "@/components/binding/SchematicCanvas";
+import { TrendDialog } from "@/components/binding/TrendDialog";
+import { parseSvg, type ImportedDiagram } from "@/lib/svg-import";
+import { Checkbox } from "@/components/ui/checkbox";
+import { toast } from "sonner";
 import {
   controllers,
   defaultFillRules,
