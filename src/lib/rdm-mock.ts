@@ -146,6 +146,7 @@ export type Binding = {
   decimals?: number | undefined;
   rules?: { match: string; color: string }[] | undefined;
   targetGraphId?: string | undefined;
+  showGraph?: boolean | undefined;
 };
 
 export const defaultFillRules = [
