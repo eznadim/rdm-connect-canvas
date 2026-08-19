@@ -78,9 +78,91 @@ const kindOrder: BindKind[] = ["text", "fill", "navigation"];
 
 const bindingId = (cellId: string, kind: BindKind) => `${cellId}:${kind}`;
 
+type Workspace = {
+  id: string;
+  name: string;
+  graphId: string;
+  bindings: Binding[];
+  upload: ImportedDiagram | null;
+};
+
+let wsCounter = 1;
+const newWorkspace = (): Workspace => ({
+  id: `ws${++wsCounter}`,
+  name: `Workspace ${wsCounter}`,
+  graphId: graphs[0]!.id,
+  bindings: [],
+  upload: null,
+});
+
 function BindingStudio() {
-  const [graphId, setGraphId] = useState(graphs[0]!.id);
-  const [bindings, setBindings] = useState<Binding[]>([]);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([
+    { id: "ws1", name: "Workspace 1", graphId: graphs[0]!.id, bindings: [], upload: null },
+  ]);
+  const [activeId, setActiveId] = useState("ws1");
+  const active = workspaces.find((w) => w.id === activeId) ?? workspaces[0]!;
+
+  const patch = (id: string, p: Partial<Workspace>) =>
+    setWorkspaces((prev) => prev.map((w) => (w.id === id ? { ...w, ...p } : w)));
+
+  function addWorkspace() {
+    const ws = newWorkspace();
+    setWorkspaces((prev) => [...prev, ws]);
+    setActiveId(ws.id);
+  }
+
+  function closeWorkspace(id: string) {
+    setWorkspaces((prev) => {
+      if (prev.length === 1) return prev;
+      const next = prev.filter((w) => w.id !== id);
+      if (id === activeId) setActiveId(next[0]!.id);
+      return next;
+    });
+  }
+
+  return (
+    <WorkspaceView
+      key={active.id}
+      workspace={active}
+      workspaces={workspaces}
+      activeId={activeId}
+      onSelectWorkspace={setActiveId}
+      onAddWorkspace={addWorkspace}
+      onCloseWorkspace={closeWorkspace}
+      onPatch={(p) => patch(active.id, p)}
+    />
+  );
+}
+
+type ViewProps = {
+  workspace: Workspace;
+  workspaces: Workspace[];
+  activeId: string;
+  onSelectWorkspace: (id: string) => void;
+  onAddWorkspace: () => void;
+  onCloseWorkspace: (id: string) => void;
+  onPatch: (p: Partial<Workspace>) => void;
+};
+
+function WorkspaceView({
+  workspace,
+  workspaces,
+  activeId,
+  onSelectWorkspace,
+  onAddWorkspace,
+  onCloseWorkspace,
+  onPatch,
+}: ViewProps) {
+  const graphId = workspace.graphId;
+  const setGraphId = (v: string) => onPatch({ graphId: v });
+  const bindings = workspace.bindings;
+  const setBindings = (fn: (prev: Binding[]) => Binding[]) =>
+    onPatch({ bindings: fn(workspace.bindings) });
+  const upload = workspace.upload;
+  const cells = upload?.cells ?? schematicCells;
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  const [trendCellId, setTrendCellId] = useState<string | null>(null);
+  const [showGraph, setShowGraph] = useState(false);
   const [selectedCell, setSelectedCell] = useState<CellDef | null>(null);
   const [kind, setKind] = useState<BindKind>("text");
   const [controllerId, setControllerId] = useState(controllers[0]!.id);
