@@ -44,6 +44,11 @@ type Props = {
   cellText: Record<string, string>;
   cellFill: Record<string, string>;
   onSelect: (cell: CellDef) => void;
+  cells?: CellDef[];
+  svgMarkup?: string | null;
+  viewBox?: string;
+  cellGraph?: Record<string, boolean>;
+  onOpenGraph?: (cellId: string) => void;
 };
 
 const kindStroke: Record<BindKind, string> = {
@@ -62,6 +67,11 @@ export function SchematicCanvas({
   cellText,
   cellFill,
   onSelect,
+  cells = schematicCells,
+  svgMarkup = null,
+  viewBox = "0 0 680 390",
+  cellGraph = {},
+  onOpenGraph,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [zoom, setZoom] = useState(1);
@@ -130,6 +140,8 @@ export function SchematicCanvas({
     setPanning(false);
   }
 
+  const [, , vbW, vbH] = viewBox.split(/\s+/).map(Number) as [number, number, number, number];
+
   return (
     <div
       ref={containerRef}
@@ -144,34 +156,43 @@ export function SchematicCanvas({
       onPointerLeave={endPan}
     >
       <svg
-        viewBox="0 0 680 390"
+        viewBox={viewBox}
         className="h-full w-full select-none"
         role="img"
-        aria-label="Chiller plant schematic with bindable cells"
+        aria-label="Diagram with bindable cells"
       >
         <defs>
           <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
             <path d="M20 0H0V20" fill="none" stroke="var(--canvas-grid)" strokeWidth="1" />
           </pattern>
         </defs>
-        <rect width="680" height="390" fill="var(--canvas-bg)" />
-        {showGrid && <rect width="680" height="390" fill="url(#grid)" />}
+        <rect width={vbW} height={vbH} fill="var(--canvas-bg)" />
+        {showGrid && <rect width={vbW} height={vbH} fill="url(#grid)" />}
 
         <g transform={`translate(${offset.x} ${offset.y}) scale(${zoom})`}>
-          {/* static pipework */}
-          <g stroke="var(--pipe-chilled)" strokeWidth="3" fill="none">
-            <path d="M144 85 H330 V150" />
-            <path d="M144 127 H180 V300 H210" />
-          </g>
-          <g stroke="var(--pipe-condenser)" strokeWidth="3" fill="none">
-            <path d="M500 85 H460 V185 H450" />
-            <path d="M500 127 H470 V286 H450" />
-          </g>
-          <text x="24" y="34" className="fill-[var(--canvas-title)] text-[13px] font-semibold">
-            CHILLER PLANT SCHEMATIC
-          </text>
+          {svgMarkup ? (
+            <g
+              className="pointer-events-none"
+              dangerouslySetInnerHTML={{ __html: svgMarkup }}
+            />
+          ) : (
+            <>
+              {/* static pipework */}
+              <g stroke="var(--pipe-chilled)" strokeWidth="3" fill="none">
+                <path d="M144 85 H330 V150" />
+                <path d="M144 127 H180 V300 H210" />
+              </g>
+              <g stroke="var(--pipe-condenser)" strokeWidth="3" fill="none">
+                <path d="M500 85 H460 V185 H450" />
+                <path d="M500 127 H470 V286 H450" />
+              </g>
+              <text x="24" y="34" className="fill-[var(--canvas-title)] text-[13px] font-semibold">
+                CHILLER PLANT SCHEMATIC
+              </text>
+            </>
+          )}
 
-          {schematicCells.map((c) => {
+          {cells.map((c) => {
             const kinds = cellKinds[c.id] ?? [];
             const selected = selectedCellId === c.id;
             const value = cellText[c.id];
@@ -182,6 +203,7 @@ export function SchematicCanvas({
               : kinds.includes("text")
                 ? "text"
                 : kinds[0];
+            const hasGraph = !!cellGraph[c.id] && kinds.includes("text");
             return (
               <g
                 key={c.id}
@@ -228,6 +250,41 @@ export function SchematicCanvas({
                     fill={kindStroke[k]}
                   />
                 ))}
+                {hasGraph && (
+                  <g
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Show trend graph for ${c.label}`}
+                    className="cursor-pointer"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpenGraph?.(c.id);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.stopPropagation();
+                        onOpenGraph?.(c.id);
+                      }
+                    }}
+                  >
+                    <rect
+                      x={c.x + c.w - 15}
+                      y={c.y + c.h - 15}
+                      width="13"
+                      height="13"
+                      rx="3"
+                      fill="var(--bind-text)"
+                    />
+                    <path
+                      d={`M${c.x + c.w - 12.5} ${c.y + c.h - 5} l2.5 -3.5 l2 1.8 l3.2 -4.6`}
+                      fill="none"
+                      stroke="var(--canvas-bg)"
+                      strokeWidth="1.4"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </g>
+                )}
               </g>
             );
           })}

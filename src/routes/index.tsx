@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRightLeft,
   Check,
@@ -12,9 +12,15 @@ import {
   Search,
   Trash2,
   Type as TypeIcon,
+  Upload,
+  X,
 } from "lucide-react";
 
 import { SchematicCanvas, schematicCells, type CellDef } from "@/components/binding/SchematicCanvas";
+import { TrendDialog } from "@/components/binding/TrendDialog";
+import { parseSvg, type ImportedDiagram } from "@/lib/svg-import";
+import { Checkbox } from "@/components/ui/checkbox";
+import { toast } from "sonner";
 import {
   controllers,
   defaultFillRules,
@@ -72,9 +78,91 @@ const kindOrder: BindKind[] = ["text", "fill", "navigation"];
 
 const bindingId = (cellId: string, kind: BindKind) => `${cellId}:${kind}`;
 
+type Workspace = {
+  id: string;
+  name: string;
+  graphId: string;
+  bindings: Binding[];
+  upload: ImportedDiagram | null;
+};
+
+let wsCounter = 1;
+const newWorkspace = (): Workspace => ({
+  id: `ws${++wsCounter}`,
+  name: `Workspace ${wsCounter}`,
+  graphId: graphs[0]!.id,
+  bindings: [],
+  upload: null,
+});
+
 function BindingStudio() {
-  const [graphId, setGraphId] = useState(graphs[0]!.id);
-  const [bindings, setBindings] = useState<Binding[]>([]);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([
+    { id: "ws1", name: "Workspace 1", graphId: graphs[0]!.id, bindings: [], upload: null },
+  ]);
+  const [activeId, setActiveId] = useState("ws1");
+  const active = workspaces.find((w) => w.id === activeId) ?? workspaces[0]!;
+
+  const patch = (id: string, p: Partial<Workspace>) =>
+    setWorkspaces((prev) => prev.map((w) => (w.id === id ? { ...w, ...p } : w)));
+
+  function addWorkspace() {
+    const ws = newWorkspace();
+    setWorkspaces((prev) => [...prev, ws]);
+    setActiveId(ws.id);
+  }
+
+  function closeWorkspace(id: string) {
+    setWorkspaces((prev) => {
+      if (prev.length === 1) return prev;
+      const next = prev.filter((w) => w.id !== id);
+      if (id === activeId) setActiveId(next[0]!.id);
+      return next;
+    });
+  }
+
+  return (
+    <WorkspaceView
+      key={active.id}
+      workspace={active}
+      workspaces={workspaces}
+      activeId={activeId}
+      onSelectWorkspace={setActiveId}
+      onAddWorkspace={addWorkspace}
+      onCloseWorkspace={closeWorkspace}
+      onPatch={(p) => patch(active.id, p)}
+    />
+  );
+}
+
+type ViewProps = {
+  workspace: Workspace;
+  workspaces: Workspace[];
+  activeId: string;
+  onSelectWorkspace: (id: string) => void;
+  onAddWorkspace: () => void;
+  onCloseWorkspace: (id: string) => void;
+  onPatch: (p: Partial<Workspace>) => void;
+};
+
+function WorkspaceView({
+  workspace,
+  workspaces,
+  activeId,
+  onSelectWorkspace,
+  onAddWorkspace,
+  onCloseWorkspace,
+  onPatch,
+}: ViewProps) {
+  const graphId = workspace.graphId;
+  const setGraphId = (v: string) => onPatch({ graphId: v });
+  const bindings = workspace.bindings;
+  const setBindings = (fn: (prev: Binding[]) => Binding[]) =>
+    onPatch({ bindings: fn(workspace.bindings) });
+  const upload = workspace.upload;
+  const cells = upload?.cells ?? schematicCells;
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  const [trendCellId, setTrendCellId] = useState<string | null>(null);
+  const [showGraph, setShowGraph] = useState(false);
   const [selectedCell, setSelectedCell] = useState<CellDef | null>(null);
   const [kind, setKind] = useState<BindKind>("text");
   const [controllerId, setControllerId] = useState(controllers[0]!.id);
@@ -153,6 +241,7 @@ function BindingStudio() {
       setPrefix("");
       setSuffix("");
       setRules(defaultFillRules);
+      setShowGraph(false);
       return;
     }
     if (b.controllerId) setControllerId(b.controllerId);
@@ -160,9 +249,41 @@ function BindingStudio() {
     setPrefix(b.prefix ?? "");
     setSuffix(b.suffix ?? "");
     setRules(b.rules ?? defaultFillRules);
+    setShowGraph(!!b.showGraph);
     if (b.targetGraphId) setTargetGraphId(b.targetGraphId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCell?.id, kind]);
+
+  const cellGraph = useMemo(() => {
+    const out: Record<string, boolean> = {};
+    for (const b of bindings) if (b.kind === "text" && b.showGraph) out[b.cellId] = true;
+    return out;
+  }, [bindings]);
+
+  const trendBinding = trendCellId
+    ? (bindings.find((b) => b.cellId === trendCellId && b.kind === "text") ?? null)
+    : null;
+  const trendPoint = trendBinding
+    ? (controllers
+        .find((c) => c.id === trendBinding.controllerId)
+        ?.points.find((p) => p.id === trendBinding.pointId) ?? null)
+    : null;
+
+  async function onUpload(file: File) {
+    try {
+      const text = await file.text();
+      const parsed = parseSvg(file.name.replace(/\.svg$/i, ""), text);
+      onPatch({ upload: parsed, bindings: [] });
+      setSelectedCell(null);
+      toast.success(`Loaded ${parsed.name}`, {
+        description: `${parsed.cells.length} bindable cells detected`,
+      });
+    } catch (err) {
+      toast.error("Could not read that SVG", {
+        description: err instanceof Error ? err.message : "Unknown error",
+      });
+    }
+  }
 
   const canApply = selectedCell && (kind === "navigation" ? !!targetGraphId : !!point);
 
