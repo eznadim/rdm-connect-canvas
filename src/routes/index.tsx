@@ -241,6 +241,7 @@ function WorkspaceView({
       setPrefix("");
       setSuffix("");
       setRules(defaultFillRules);
+      setShowGraph(false);
       return;
     }
     if (b.controllerId) setControllerId(b.controllerId);
@@ -248,9 +249,41 @@ function WorkspaceView({
     setPrefix(b.prefix ?? "");
     setSuffix(b.suffix ?? "");
     setRules(b.rules ?? defaultFillRules);
+    setShowGraph(!!b.showGraph);
     if (b.targetGraphId) setTargetGraphId(b.targetGraphId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCell?.id, kind]);
+
+  const cellGraph = useMemo(() => {
+    const out: Record<string, boolean> = {};
+    for (const b of bindings) if (b.kind === "text" && b.showGraph) out[b.cellId] = true;
+    return out;
+  }, [bindings]);
+
+  const trendBinding = trendCellId
+    ? (bindings.find((b) => b.cellId === trendCellId && b.kind === "text") ?? null)
+    : null;
+  const trendPoint = trendBinding
+    ? (controllers
+        .find((c) => c.id === trendBinding.controllerId)
+        ?.points.find((p) => p.id === trendBinding.pointId) ?? null)
+    : null;
+
+  async function onUpload(file: File) {
+    try {
+      const text = await file.text();
+      const parsed = parseSvg(file.name.replace(/\.svg$/i, ""), text);
+      onPatch({ upload: parsed, bindings: [] });
+      setSelectedCell(null);
+      toast.success(`Loaded ${parsed.name}`, {
+        description: `${parsed.cells.length} bindable cells detected`,
+      });
+    } catch (err) {
+      toast.error("Could not read that SVG", {
+        description: err instanceof Error ? err.message : "Unknown error",
+      });
+    }
+  }
 
   const canApply = selectedCell && (kind === "navigation" ? !!targetGraphId : !!point);
 
