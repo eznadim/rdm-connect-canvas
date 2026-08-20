@@ -550,7 +550,7 @@ function WorkspaceView({
                           key={b.id}
                           className="cursor-pointer border-t border-border/60 hover:bg-accent/40"
                           onClick={() => {
-                            setSelectedCell(schematicCells.find((c) => c.id === b.cellId)!);
+                            setSelectedCell(cells.find((c) => c.id === b.cellId) ?? null);
                             setKind(b.kind);
                           }}
                         >
