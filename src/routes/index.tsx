@@ -304,6 +304,7 @@ function WorkspaceView({
       prefix: kind === "text" ? prefix : undefined,
       rules: kind === "fill" ? rules : undefined,
       targetGraphId: kind === "navigation" ? targetGraphId : undefined,
+      showGraph: kind === "text" ? showGraph : undefined,
     };
     setBindings((prev) => [...prev.filter((b) => b.id !== next.id), next]);
   }
@@ -331,9 +332,9 @@ function WorkspaceView({
         </div>
 
         <div className="ml-4 w-72">
-          <Select value={graphId} onValueChange={setGraphId}>
+          <Select value={graphId} onValueChange={setGraphId} disabled={!!upload}>
             <SelectTrigger className="h-9">
-              <SelectValue />
+              <SelectValue placeholder="Select diagram" />
             </SelectTrigger>
             <SelectContent>
               {graphs.map((g) => (
@@ -343,6 +344,45 @@ function WorkspaceView({
               ))}
             </SelectContent>
           </Select>
+        </div>
+
+        {/* upload diagram */}
+        <div className="flex items-center gap-2">
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".svg,image/svg+xml"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void onUpload(f);
+              e.target.value = "";
+            }}
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => fileRef.current?.click()}
+          >
+            <Upload className="size-3.5" />
+            Upload SVG
+          </Button>
+          {upload && (
+            <span className="flex items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-1 text-[11px]">
+              {upload.name} · {upload.cells.length} cells
+              <button
+                aria-label="Remove uploaded diagram"
+                className="text-muted-foreground hover:text-destructive"
+                onClick={() => {
+                  onPatch({ upload: null, bindings: [] });
+                  setSelectedCell(null);
+                }}
+              >
+                <X className="size-3" />
+              </button>
+            </span>
+          )}
         </div>
 
         <div className="ml-auto flex items-center gap-2">
@@ -359,6 +399,50 @@ function WorkspaceView({
           <Button size="sm">Save mapping</Button>
         </div>
       </header>
+
+      {/* workspace tabs */}
+      <div className="flex items-end gap-1 border-b border-border bg-card/70 px-3 pt-1.5">
+        {workspaces.map((w) => {
+          const isActive = w.id === activeId;
+          return (
+            <div
+              key={w.id}
+              onClick={() => onSelectWorkspace(w.id)}
+              className={cn(
+                "group flex cursor-pointer items-center gap-2 rounded-t-md border border-b-0 px-3 py-1.5 text-xs",
+                isActive
+                  ? "border-border bg-background text-foreground"
+                  : "border-transparent text-muted-foreground hover:bg-accent/40",
+              )}
+            >
+              <span className="max-w-[160px] truncate">
+                {w.name}
+                <span className="ml-1.5 text-muted-foreground">({w.bindings.length})</span>
+              </span>
+              {workspaces.length > 1 && (
+                <button
+                  aria-label={`Close ${w.name}`}
+                  className="text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onCloseWorkspace(w.id);
+                  }}
+                >
+                  <X className="size-3" />
+                </button>
+              )}
+            </div>
+          );
+        })}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="mb-1 h-7 gap-1 text-xs"
+          onClick={onAddWorkspace}
+        >
+          <Plus className="size-3.5" /> New workspace
+        </Button>
+      </div>
 
       {/* step rail */}
       <div className="flex items-center gap-6 border-b border-border bg-card/50 px-5 py-2 text-xs">
@@ -389,7 +473,7 @@ function WorkspaceView({
         <section className="flex min-w-0 flex-1 flex-col">
           <div className="flex items-center justify-between border-b border-border px-5 py-2 text-xs text-muted-foreground">
             <span>
-              {schematicCells.length} detected cells · {bindings.length} bindings on{" "}
+              {cells.length} detected cells · {bindings.length} bindings on{" "}
               {Object.keys(cellKinds).length} cells
             </span>
             <span className="flex items-center gap-4">
@@ -412,6 +496,11 @@ function WorkspaceView({
                 cellText={cellText}
                 cellFill={cellFill}
                 onSelect={selectCell}
+                cells={cells}
+                svgMarkup={upload?.markup ?? null}
+                viewBox={upload?.viewBox ?? "0 0 680 390"}
+                cellGraph={cellGraph}
+                onOpenGraph={setTrendCellId}
               />
             </div>
           </div>
@@ -461,7 +550,7 @@ function WorkspaceView({
                           key={b.id}
                           className="cursor-pointer border-t border-border/60 hover:bg-accent/40"
                           onClick={() => {
-                            setSelectedCell(schematicCells.find((c) => c.id === b.cellId)!);
+                            setSelectedCell(cells.find((c) => c.id === b.cellId) ?? null);
                             setKind(b.kind);
                           }}
                         >
@@ -710,6 +799,24 @@ function WorkspaceView({
                       </div>
                     )}
 
+                    {kind === "text" && (
+                      <label className="flex cursor-pointer items-start gap-2 rounded-md border border-border p-2.5">
+                        <Checkbox
+                          checked={showGraph}
+                          onCheckedChange={(v) => setShowGraph(v === true)}
+                          className="mt-0.5"
+                        />
+                        <span className="space-y-0.5">
+                          <span className="block text-xs font-medium">Show graph</span>
+                          <span className="block text-[11px] text-muted-foreground">
+                            Adds a small chart button to the bottom-right of the cell that opens a
+                            trend graph for this point.
+                          </span>
+                        </span>
+                      </label>
+                    )}
+
+
                     {kind === "fill" && (
                       <div className="space-y-1.5">
                         <div className="flex items-center justify-between">
@@ -834,6 +941,15 @@ function WorkspaceView({
           )}
         </aside>
       </div>
+
+      <TrendDialog
+        open={!!trendCellId && !!trendPoint}
+        onOpenChange={(o) => !o && setTrendCellId(null)}
+        title={trendBinding?.cellLabel ?? ""}
+        pointName={trendPoint?.name ?? ""}
+        units={trendPoint?.units ?? ""}
+        value={trendPoint?.value ?? ""}
+      />
     </main>
   );
 }
