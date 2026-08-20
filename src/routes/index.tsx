@@ -496,6 +496,11 @@ function WorkspaceView({
                 cellText={cellText}
                 cellFill={cellFill}
                 onSelect={selectCell}
+                cells={cells}
+                svgMarkup={upload?.markup ?? null}
+                viewBox={upload?.viewBox ?? "0 0 680 390"}
+                cellGraph={cellGraph}
+                onOpenGraph={setTrendCellId}
               />
             </div>
           </div>
