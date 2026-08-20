@@ -332,9 +332,9 @@ function WorkspaceView({
         </div>
 
         <div className="ml-4 w-72">
-          <Select value={graphId} onValueChange={setGraphId}>
+          <Select value={graphId} onValueChange={setGraphId} disabled={!!upload}>
             <SelectTrigger className="h-9">
-              <SelectValue />
+              <SelectValue placeholder="Select diagram" />
             </SelectTrigger>
             <SelectContent>
               {graphs.map((g) => (
@@ -344,6 +344,45 @@ function WorkspaceView({
               ))}
             </SelectContent>
           </Select>
+        </div>
+
+        {/* upload diagram */}
+        <div className="flex items-center gap-2">
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".svg,image/svg+xml"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void onUpload(f);
+              e.target.value = "";
+            }}
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => fileRef.current?.click()}
+          >
+            <Upload className="size-3.5" />
+            Upload SVG
+          </Button>
+          {upload && (
+            <span className="flex items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-1 text-[11px]">
+              {upload.name} · {upload.cells.length} cells
+              <button
+                aria-label="Remove uploaded diagram"
+                className="text-muted-foreground hover:text-destructive"
+                onClick={() => {
+                  onPatch({ upload: null, bindings: [] });
+                  setSelectedCell(null);
+                }}
+              >
+                <X className="size-3" />
+              </button>
+            </span>
+          )}
         </div>
 
         <div className="ml-auto flex items-center gap-2">
