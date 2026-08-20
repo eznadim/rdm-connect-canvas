@@ -400,6 +400,50 @@ function WorkspaceView({
         </div>
       </header>
 
+      {/* workspace tabs */}
+      <div className="flex items-end gap-1 border-b border-border bg-card/70 px-3 pt-1.5">
+        {workspaces.map((w) => {
+          const isActive = w.id === activeId;
+          return (
+            <div
+              key={w.id}
+              onClick={() => onSelectWorkspace(w.id)}
+              className={cn(
+                "group flex cursor-pointer items-center gap-2 rounded-t-md border border-b-0 px-3 py-1.5 text-xs",
+                isActive
+                  ? "border-border bg-background text-foreground"
+                  : "border-transparent text-muted-foreground hover:bg-accent/40",
+              )}
+            >
+              <span className="max-w-[160px] truncate">
+                {w.name}
+                <span className="ml-1.5 text-muted-foreground">({w.bindings.length})</span>
+              </span>
+              {workspaces.length > 1 && (
+                <button
+                  aria-label={`Close ${w.name}`}
+                  className="text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onCloseWorkspace(w.id);
+                  }}
+                >
+                  <X className="size-3" />
+                </button>
+              )}
+            </div>
+          );
+        })}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="mb-1 h-7 gap-1 text-xs"
+          onClick={onAddWorkspace}
+        >
+          <Plus className="size-3.5" /> New workspace
+        </Button>
+      </div>
+
       {/* step rail */}
       <div className="flex items-center gap-6 border-b border-border bg-card/50 px-5 py-2 text-xs">
         {[
