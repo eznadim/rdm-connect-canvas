@@ -799,6 +799,24 @@ function WorkspaceView({
                       </div>
                     )}
 
+                    {kind === "text" && (
+                      <label className="flex cursor-pointer items-start gap-2 rounded-md border border-border p-2.5">
+                        <Checkbox
+                          checked={showGraph}
+                          onCheckedChange={(v) => setShowGraph(v === true)}
+                          className="mt-0.5"
+                        />
+                        <span className="space-y-0.5">
+                          <span className="block text-xs font-medium">Show graph</span>
+                          <span className="block text-[11px] text-muted-foreground">
+                            Adds a small chart button to the bottom-right of the cell that opens a
+                            trend graph for this point.
+                          </span>
+                        </span>
+                      </label>
+                    )}
+
+
                     {kind === "fill" && (
                       <div className="space-y-1.5">
                         <div className="flex items-center justify-between">
