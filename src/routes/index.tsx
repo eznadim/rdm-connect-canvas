@@ -941,6 +941,15 @@ function WorkspaceView({
           )}
         </aside>
       </div>
+
+      <TrendDialog
+        open={!!trendCellId && !!trendPoint}
+        onOpenChange={(o) => !o && setTrendCellId(null)}
+        title={trendBinding?.cellLabel ?? ""}
+        pointName={trendPoint?.name ?? ""}
+        units={trendPoint?.units ?? ""}
+        value={trendPoint?.value ?? ""}
+      />
     </main>
   );
 }
