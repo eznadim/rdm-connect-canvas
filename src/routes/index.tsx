@@ -304,6 +304,7 @@ function WorkspaceView({
       prefix: kind === "text" ? prefix : undefined,
       rules: kind === "fill" ? rules : undefined,
       targetGraphId: kind === "navigation" ? targetGraphId : undefined,
+      showGraph: kind === "text" ? showGraph : undefined,
     };
     setBindings((prev) => [...prev.filter((b) => b.id !== next.id), next]);
   }
