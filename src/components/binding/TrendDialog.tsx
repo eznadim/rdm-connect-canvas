@@ -85,7 +85,6 @@ export function TrendDialog({ open, onOpenChange, title, pointName, units, value
                   tickLine={false}
                   axisLine={false}
                   width={46}
-                  unit={units ? ` ${units}` : ""}
                 />
                 <Tooltip
                   contentStyle={{
