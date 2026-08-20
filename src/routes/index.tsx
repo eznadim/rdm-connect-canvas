@@ -473,7 +473,7 @@ function WorkspaceView({
         <section className="flex min-w-0 flex-1 flex-col">
           <div className="flex items-center justify-between border-b border-border px-5 py-2 text-xs text-muted-foreground">
             <span>
-              {schematicCells.length} detected cells · {bindings.length} bindings on{" "}
+              {cells.length} detected cells · {bindings.length} bindings on{" "}
               {Object.keys(cellKinds).length} cells
             </span>
             <span className="flex items-center gap-4">
